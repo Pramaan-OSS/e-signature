@@ -1,0 +1,1 @@
+ALTER TYPE "EmailTransportType" ADD VALUE 'PRAMAAN';

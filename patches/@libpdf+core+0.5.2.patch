@@ -1,0 +1,59 @@
+diff --git a/node_modules/@libpdf/core/dist/index.mjs b/node_modules/@libpdf/core/dist/index.mjs
+index 27ae208..12f6422 100644
+--- a/node_modules/@libpdf/core/dist/index.mjs
++++ b/node_modules/@libpdf/core/dist/index.mjs
+@@ -45498,29 +45498,11 @@ function extractPublicKeyFromCertificate(certDer) {
+ function publicKeysMatch(kmsPem, certPem) {
+ 	return normalizePem(kmsPem) === normalizePem(certPem);
+ }
+-/**
+-* Dynamically import @google-cloud/kms.
+-*/
+ async function importKms() {
+-	try {
+-		return await import("@google-cloud/kms");
+-	} catch (error) {
+-		const code = error.code;
+-		if (code === "ERR_MODULE_NOT_FOUND" || code === "MODULE_NOT_FOUND") throw new KmsSignerError("@google-cloud/kms is required. Install with: npm install @google-cloud/kms");
+-		throw error;
+-	}
++	throw new KmsSignerError("Remote digest signing is unavailable.");
+ }
+-/**
+-* Dynamically import @google-cloud/secret-manager.
+-*/
+ async function importSecretManager() {
+-	try {
+-		return await import("@google-cloud/secret-manager");
+-	} catch (error) {
+-		const code = error.code;
+-		if (code === "ERR_MODULE_NOT_FOUND" || code === "MODULE_NOT_FOUND") throw new KmsSignerError("@google-cloud/secret-manager is required. Install with: npm install @google-cloud/secret-manager");
+-		throw error;
+-	}
++	throw new KmsSignerError("Cloud certificate retrieval is unavailable.");
+ }
+ /**
+ * gRPC status codes.
+diff --git a/node_modules/@libpdf/core/package.json b/node_modules/@libpdf/core/package.json
+index 695ce7b..daaf36f 100644
+--- a/node_modules/@libpdf/core/package.json
++++ b/node_modules/@libpdf/core/package.json
+@@ -89,18 +89,6 @@
+     "typescript": "^5.9.3",
+     "vitest": "^4.1.8"
+   },
+-  "peerDependencies": {
+-    "@google-cloud/kms": "^5.0.0",
+-    "@google-cloud/secret-manager": "^6.0.0"
+-  },
+-  "peerDependenciesMeta": {
+-    "@google-cloud/kms": {
+-      "optional": true
+-    },
+-    "@google-cloud/secret-manager": {
+-      "optional": true
+-    }
+-  },
+   "engines": {
+     "node": ">=20"
+   }

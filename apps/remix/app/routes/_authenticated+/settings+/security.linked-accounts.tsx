@@ -1,0 +1,180 @@
+import { authClient } from '@e-sign/auth/client';
+import { IDENTITY_PROVIDER_NAME } from '@e-sign/lib/constants/auth';
+import { AppError } from '@e-sign/lib/errors/app-error';
+import { Button } from '@e-sign/ui/primitives/button';
+import type { DataTableColumnDef } from '@e-sign/ui/primitives/data-table';
+import { DataTable } from '@e-sign/ui/primitives/data-table';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@e-sign/ui/primitives/dialog';
+import { Skeleton } from '@e-sign/ui/primitives/skeleton';
+import { TableCell } from '@e-sign/ui/primitives/table';
+import { useToast } from '@e-sign/ui/primitives/use-toast';
+import { msg } from '@lingui/core/macro';
+import { Trans, useLingui } from '@lingui/react/macro';
+import { useQuery } from '@tanstack/react-query';
+import { DateTime } from 'luxon';
+import { useMemo, useState } from 'react';
+
+import { SettingsHeader } from '~/components/general/settings-header';
+import { appMetaTags } from '~/utils/meta';
+
+export function meta() {
+  return appMetaTags(msg`Linked Accounts`);
+}
+
+export default function SettingsSecurityLinkedAccounts() {
+  const { t } = useLingui();
+
+  const { data, isLoading, isLoadingError, refetch } = useQuery({
+    queryKey: ['linked-accounts'],
+    queryFn: async () => await authClient.account.getMany(),
+  });
+
+  const results = data?.accounts ?? [];
+
+  const columns = useMemo(() => {
+    return [
+      {
+        header: t`Provider`,
+        accessorKey: 'provider',
+        cell: ({ row }) => IDENTITY_PROVIDER_NAME[row.original.provider.toUpperCase()] || 'Organisation account',
+      },
+      {
+        header: t`Linked At`,
+        accessorKey: 'createdAt',
+        cell: ({ row }) =>
+          row.original.createdAt ? DateTime.fromJSDate(row.original.createdAt).toRelative() : t`Unknown`,
+      },
+      {
+        id: 'actions',
+        cell: ({ row }) => (
+          <AccountUnlinkDialog
+            accountId={row.original.id}
+            provider={IDENTITY_PROVIDER_NAME[row.original.provider.toUpperCase()] || 'Organisation account'}
+            onSuccess={refetch}
+          />
+        ),
+      },
+    ] satisfies DataTableColumnDef<(typeof results)[number]>[];
+  }, []);
+
+  return (
+    <div>
+      <SettingsHeader
+        title={t`Linked Accounts`}
+        subtitle={t`View and manage all login methods linked to your account.`}
+      />
+
+      <div className="mt-4">
+        <DataTable
+          columns={columns}
+          data={results}
+          hasFilters={false}
+          error={{
+            enable: isLoadingError,
+          }}
+          skeleton={{
+            enable: isLoading,
+            rows: 3,
+            component: (
+              <>
+                <TableCell>
+                  <Skeleton className="h-4 w-40 rounded-full" />
+                </TableCell>
+                <TableCell>
+                  <Skeleton className="h-4 w-24 rounded-full" />
+                </TableCell>
+                <TableCell>
+                  <Skeleton className="h-8 w-16 rounded" />
+                </TableCell>
+              </>
+            ),
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
+type AccountUnlinkDialogProps = {
+  accountId: string;
+  provider: string;
+  onSuccess: () => Promise<unknown>;
+};
+
+const AccountUnlinkDialog = ({ accountId, onSuccess, provider }: AccountUnlinkDialogProps) => {
+  const { toast } = useToast();
+  const { t } = useLingui();
+
+  const [isLoading, setIsLoading] = useState(false);
+  const [open, setOpen] = useState(false);
+
+  const handleRevoke = async () => {
+    setIsLoading(true);
+
+    try {
+      await authClient.account.delete(accountId);
+
+      await onSuccess();
+
+      toast({
+        title: t`Account unlinked`,
+      });
+    } catch (error) {
+      console.error(error);
+
+      toast({
+        title: t`Error`,
+        description:
+          AppError.parseError(error).message === 'Add another sign-in method before unlinking your only account.'
+            ? t`Add another sign-in method before unlinking your only account.`
+            : t`Failed to unlink account`,
+        variant: 'destructive',
+      });
+    }
+
+    setIsLoading(false);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(value) => !isLoading && setOpen(value)}>
+      <DialogTrigger asChild>
+        <Button variant="destructive" size="sm">
+          <Trans>Unlink</Trans>
+        </Button>
+      </DialogTrigger>
+
+      <DialogContent position="center">
+        <DialogHeader>
+          <DialogTitle>
+            <Trans>Are you sure?</Trans>
+          </DialogTitle>
+
+          <DialogDescription className="mt-4">
+            <Trans>
+              You are about to remove the <span className="font-semibold">{provider}</span> login method from your
+              account.
+            </Trans>
+          </DialogDescription>
+        </DialogHeader>
+
+        <DialogFooter>
+          <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
+            <Trans>Cancel</Trans>
+          </Button>
+
+          <Button variant="destructive" loading={isLoading} onClick={handleRevoke}>
+            <Trans>Unlink</Trans>
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+};

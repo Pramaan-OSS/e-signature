@@ -1,0 +1,29 @@
+{
+  "name": "@e-sign/email",
+  "version": "0.0.0",
+  "main": "./index.ts",
+  "types": "./index.ts",
+  "license": "MIT",
+  "files": [
+    "templates/",
+    "transports/",
+    "mailer.ts",
+    "render.ts",
+    "index.ts"
+  ],
+  "scripts": {
+    "dev": "react-router dev --config preview/vite.config.ts",
+    "preview:build": "react-router build --config preview/vite.config.ts",
+    "clean": "rimraf node_modules"
+  },
+  "dependencies": {
+    "@e-sign/tailwind-config": "*",
+    "@react-email/render": "2.1.0",
+    "nodemailer": "^10.0.9",
+    "react-email": "^6.9.0"
+  },
+  "devDependencies": {
+    "@e-sign/tsconfig": "*",
+    "@types/nodemailer": "^8.0.1"
+  }
+}

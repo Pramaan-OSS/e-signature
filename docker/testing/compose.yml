@@ -1,0 +1,15 @@
+name: e-sign-test
+services:
+  database:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: e_sign
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set a private database password}
+      POSTGRES_DB: e_sign
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB']
+      interval: 1s
+      timeout: 5s
+      retries: 5
+    ports:
+      - "54322:5432"

@@ -1,0 +1,31 @@
+import { prisma } from '@e-sign/prisma';
+
+import { TEAM_MEMBER_ROLE_PERMISSIONS_MAP } from '../../constants/teams';
+import { buildTeamWhereQuery } from '../../utils/teams';
+
+export type GetApiTokensOptions = {
+  userId: number;
+  teamId: number;
+};
+
+export const getApiTokens = async ({ userId, teamId }: GetApiTokensOptions) => {
+  return await prisma.apiToken.findMany({
+    where: {
+      team: buildTeamWhereQuery({
+        teamId,
+        userId,
+        roles: TEAM_MEMBER_ROLE_PERMISSIONS_MAP['MANAGE_TEAM'],
+      }),
+    },
+    select: {
+      id: true,
+      name: true,
+      createdAt: true,
+      expires: true,
+      lastUsedAt: true,
+    },
+    orderBy: {
+      createdAt: 'desc',
+    },
+  });
+};

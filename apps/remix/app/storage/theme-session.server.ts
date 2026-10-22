@@ -1,0 +1,18 @@
+import { getCookieDomain, shouldUseSecureCookies } from '@e-sign/lib/constants/auth';
+import { createCookieSessionStorage } from 'react-router';
+import { createThemeSessionResolver } from 'remix-themes';
+
+const themeSessionStorage = createCookieSessionStorage({
+  cookie: {
+    name: 'theme',
+    path: '/',
+    httpOnly: true,
+    sameSite: 'lax',
+    secrets: ['insecure-secret-do-not-care'],
+    secure: shouldUseSecureCookies(),
+    domain: getCookieDomain(),
+    maxAge: 60 * 60 * 24 * 365,
+  },
+});
+
+export const themeSessionResolver = createThemeSessionResolver(themeSessionStorage);

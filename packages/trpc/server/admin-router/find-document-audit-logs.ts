@@ -1,0 +1,77 @@
+import { AppError, AppErrorCode } from '@e-sign/lib/errors/app-error';
+import type { FindResultResponse } from '@e-sign/lib/types/search-params';
+import { parseDocumentAuditLogData } from '@e-sign/lib/utils/document-audit-logs';
+import { unsafeBuildEnvelopeIdQuery } from '@e-sign/lib/utils/envelope';
+import { prisma } from '@e-sign/prisma';
+import { EnvelopeType, type Prisma } from '@prisma/client';
+
+import { adminProcedure } from '../trpc';
+import {
+  ZFindDocumentAuditLogsRequestSchema,
+  ZFindDocumentAuditLogsResponseSchema,
+} from './find-document-audit-logs.types';
+
+export const findDocumentAuditLogsRoute = adminProcedure
+  .input(ZFindDocumentAuditLogsRequestSchema)
+  .output(ZFindDocumentAuditLogsResponseSchema)
+  .query(async ({ input }) => {
+    const {
+      envelopeId,
+      recipientId,
+      page = 1,
+      perPage = 50,
+      orderByColumn = 'createdAt',
+      orderByDirection = 'desc',
+    } = input;
+
+    const envelope = await prisma.envelope.findFirst({
+      where: unsafeBuildEnvelopeIdQuery(
+        {
+          type: 'envelopeId',
+          id: envelopeId,
+        },
+        EnvelopeType.DOCUMENT,
+      ),
+    });
+
+    if (!envelope) {
+      throw new AppError(AppErrorCode.NOT_FOUND, {
+        message: 'Envelope not found',
+      });
+    }
+
+    const whereClause: Prisma.DocumentAuditLogWhereInput = {
+      envelopeId: envelope.id,
+    };
+
+    if (recipientId !== undefined) {
+      whereClause.data = {
+        path: ['recipientId'],
+        equals: recipientId,
+      };
+    }
+
+    const [data, count] = await Promise.all([
+      prisma.documentAuditLog.findMany({
+        where: whereClause,
+        skip: Math.max(page - 1, 0) * perPage,
+        take: perPage,
+        orderBy: {
+          [orderByColumn]: orderByDirection,
+        },
+      }),
+      prisma.documentAuditLog.count({
+        where: whereClause,
+      }),
+    ]);
+
+    const parsedData = data.map((auditLog) => parseDocumentAuditLogData(auditLog));
+
+    return {
+      data: parsedData,
+      count,
+      currentPage: Math.max(page, 1),
+      perPage,
+      totalPages: Math.ceil(count / perPage),
+    } satisfies FindResultResponse<typeof parsedData>;
+  });

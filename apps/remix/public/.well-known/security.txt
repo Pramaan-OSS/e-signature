@@ -1,0 +1,14 @@
+# Report security vulnerabilities privately via GitHub Security Advisories (preferred).
+Contact: https://example.invalid/source-credits/security/advisories/new
+
+# Alternatively, report critical issues privately by email.
+Contact: mailto:security@example.test
+
+# Security policy
+Policy: https://example.invalid/source-credits/security/policy
+
+# General (non-security) issues
+Contact: https://example.invalid/source-credits/issues/new?assignees=&labels=bug&projects=&template=bug-report.yml
+
+Preferred-Languages: en
+Canonical: /help

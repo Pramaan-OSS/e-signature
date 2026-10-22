@@ -1,0 +1,40 @@
+name: e-sign-local
+services:
+  database:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: e_sign
+      POSTGRES_DB: e_sign
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run ./start}
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U e_sign -d e_sign']
+      interval: 2s
+      timeout: 5s
+      retries: 30
+    volumes:
+      - database:/var/lib/postgresql/data
+  app:
+    build:
+      context: ../..
+      dockerfile: docker/local/Dockerfile
+    env_file: ../../.env
+    environment:
+      NEXT_PRIVATE_DATABASE_URL: postgresql://e_sign:${POSTGRES_PASSWORD}@database:5432/e_sign
+      NEXT_PRIVATE_DIRECT_DATABASE_URL: postgresql://e_sign:${POSTGRES_PASSWORD}@database:5432/e_sign
+      NEXT_PRIVATE_SIGNING_LOCAL_FILE_PATH: ${NEXT_PRIVATE_SIGNING_LOCAL_FILE_PATH:-/app/.local/signing.p12}
+      NEXT_PRIVATE_JOBS_PROVIDER: local
+      NEXT_PUBLIC_UPLOAD_TRANSPORT: ${NEXT_PUBLIC_UPLOAD_TRANSPORT:-database}
+      NEXT_PUBLIC_WEBAPP_URL: ${NEXT_PUBLIC_WEBAPP_URL:-http://localhost:3012}
+      NEXT_PRIVATE_INTERNAL_WEBAPP_URL: http://localhost:3012
+      PORT: '3012'
+      E_SIGN_FAKE: ${E_SIGN_FAKE:-0}
+    ports:
+      - '${PORT:-3012}:3012'
+    volumes:
+      - ../../.local:/app/.local
+      - ../../.runtime:/app/.runtime
+    depends_on:
+      database:
+        condition: service_healthy
+volumes:
+  database:

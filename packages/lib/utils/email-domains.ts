@@ -1,0 +1,1 @@
+export const generateEmailDomainRecords = (_recordName: string, storedRecords: string): { name: string; value: string; type: string }[] => { try { const result = JSON.parse(storedRecords); return Array.isArray(result) ? result : []; } catch { return []; } };

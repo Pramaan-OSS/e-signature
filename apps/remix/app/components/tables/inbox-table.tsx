@@ -1,0 +1,261 @@
+import { useUpdateSearchParams } from '@e-sign/lib/client-only/hooks/use-update-search-params';
+import { useSession } from '@e-sign/lib/client-only/providers/session';
+import { isDocumentCompleted } from '@e-sign/lib/utils/document';
+import { trpc } from '@e-sign/trpc/react';
+import type { TFindInboxResponse } from '@e-sign/trpc/server/document-router/find-inbox.types';
+import { Button } from '@e-sign/ui/primitives/button';
+import type { DataTableColumnDef } from '@e-sign/ui/primitives/data-table';
+import { DataTable } from '@e-sign/ui/primitives/data-table';
+import { DataTablePagination } from '@e-sign/ui/primitives/data-table-pagination';
+import { Skeleton } from '@e-sign/ui/primitives/skeleton';
+import { TableCell } from '@e-sign/ui/primitives/table';
+import { useToast } from '@e-sign/ui/primitives/use-toast';
+import { msg } from '@lingui/core/macro';
+import { useLingui } from '@lingui/react';
+import { Trans } from '@lingui/react/macro';
+import { DocumentStatus as DocumentStatusEnum, RecipientRole, SigningStatus } from '@prisma/client';
+import { CheckCircleIcon, DownloadIcon, EyeIcon, Loader, PencilIcon } from 'lucide-react';
+import { DateTime } from 'luxon';
+import { useQueryStates } from 'nuqs';
+import { useMemo, useTransition } from 'react';
+import { match } from 'ts-pattern';
+
+import { DocumentStatus } from '~/components/general/document/document-status';
+import { useOptionalCurrentTeam } from '~/providers/team';
+import { inboxSearchParams, resolveInboxStatus } from '~/utils/inbox-search-params';
+
+import { EnvelopeDownloadDialog } from '../dialogs/envelope-download-dialog';
+import { StackAvatarsWithTooltip } from '../general/stack-avatars-with-tooltip';
+
+type DocumentsTableRow = TFindInboxResponse['data'][number];
+
+export const InboxTable = () => {
+  const { _, i18n } = useLingui();
+
+  const team = useOptionalCurrentTeam();
+  const [isPending, startTransition] = useTransition();
+
+  const updateSearchParams = useUpdateSearchParams();
+
+  const [findInboxSearchParams] = useQueryStates(inboxSearchParams, {
+    history: 'push',
+  });
+
+  const status = resolveInboxStatus(findInboxSearchParams.status);
+  const query = findInboxSearchParams.query ?? '';
+
+  const { data, isLoading, isLoadingError } = trpc.document.inbox.find.useQuery({
+    page: Math.max(findInboxSearchParams.page ?? 1, 1),
+    perPage: Math.min(Math.max(findInboxSearchParams.perPage ?? 10, 1), 100),
+    query: query || undefined,
+    status,
+  });
+
+  const hasSearchQuery = query.trim().length > 0;
+
+  const columns = useMemo(() => {
+    return [
+      {
+        header: _(msg`Created`),
+        accessorKey: 'createdAt',
+        cell: ({ row }) => i18n.date(row.original.createdAt, { ...DateTime.DATETIME_SHORT, hourCycle: 'h12' }),
+      },
+      {
+        header: _(msg`Title`),
+        cell: ({ row }) => (
+          <span className="block max-w-[10rem] truncate font-medium md:max-w-[20rem]">{row.original.title}</span>
+        ),
+      },
+      {
+        id: 'sender',
+        header: _(msg`Sender`),
+        cell: ({ row }) => row.original.user.name ?? row.original.user.email,
+      },
+      {
+        header: _(msg`Recipient`),
+        accessorKey: 'recipient',
+        cell: ({ row }) => (
+          <StackAvatarsWithTooltip recipients={row.original.recipients} documentStatus={row.original.status} />
+        ),
+      },
+      {
+        header: _(msg`Status`),
+        accessorKey: 'status',
+        cell: ({ row }) => <DocumentStatus status={row.original.status} />,
+        size: 140,
+      },
+      {
+        header: _(msg`Actions`),
+        cell: ({ row }) => <InboxTableActionButton row={row.original} />,
+      },
+    ] satisfies DataTableColumnDef<DocumentsTableRow>[];
+  }, [team]);
+
+  const onPaginationChange = (page: number, perPage: number) => {
+    startTransition(() => {
+      updateSearchParams({
+        page,
+        perPage,
+      });
+    });
+  };
+
+  const results = data ?? {
+    data: [],
+    perPage: 10,
+    currentPage: 1,
+    totalPages: 1,
+  };
+
+  return (
+    <div className="relative">
+      <DataTable
+        columns={columns}
+        data={results.data}
+        perPage={results.perPage}
+        currentPage={results.currentPage}
+        totalPages={results.totalPages}
+        onPaginationChange={onPaginationChange}
+        columnVisibility={{
+          sender: team !== undefined,
+        }}
+        error={{
+          enable: isLoadingError || false,
+        }}
+        emptyState={
+          <div className="flex h-60 flex-col items-center justify-center gap-y-4 text-muted-foreground/60">
+            <p>
+              {match({ hasSearchQuery, status })
+                .with({ hasSearchQuery: true }, () => <Trans>No documents match your search</Trans>)
+                .with({ status: DocumentStatusEnum.COMPLETED }, () => (
+                  <Trans>Documents that you have completed will appear here</Trans>
+                ))
+                .with({ status: DocumentStatusEnum.REJECTED }, () => (
+                  <Trans>Documents that have been rejected will appear here</Trans>
+                ))
+                .with({ status: DocumentStatusEnum.CANCELLED }, () => (
+                  <Trans>Documents that have been cancelled will appear here</Trans>
+                ))
+                .otherwise(() => (
+                  <Trans>Documents that require your attention will appear here</Trans>
+                ))}
+            </p>
+          </div>
+        }
+        skeleton={{
+          enable: isLoading || false,
+          rows: 5,
+          component: (
+            <>
+              <TableCell>
+                <Skeleton className="h-4 w-40 rounded-full" />
+              </TableCell>
+              <TableCell>
+                <Skeleton className="h-4 w-20 rounded-full" />
+              </TableCell>
+              <TableCell className="py-4">
+                <div className="flex w-full flex-row items-center">
+                  <Skeleton className="h-10 w-10 flex-shrink-0 rounded-full" />
+                </div>
+              </TableCell>
+              <TableCell>
+                <Skeleton className="h-4 w-20 rounded-full" />
+              </TableCell>
+              <TableCell>
+                <Skeleton className="h-10 w-24 rounded" />
+              </TableCell>
+            </>
+          ),
+        }}
+      >
+        {(table) =>
+          results.totalPages > 1 && <DataTablePagination additionalInformation="VisibleCount" table={table} />
+        }
+      </DataTable>
+
+      {isPending && (
+        <div className="absolute inset-0 flex items-center justify-center bg-background/50">
+          <Loader className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      )}
+    </div>
+  );
+};
+
+export type InboxTableActionButtonProps = {
+  row: TFindInboxResponse['data'][number];
+};
+
+export const InboxTableActionButton = ({ row }: InboxTableActionButtonProps) => {
+  const { user } = useSession();
+  const { toast } = useToast();
+  const { _ } = useLingui();
+
+  const recipient = row.recipients.find((recipient) => recipient.email === user.email);
+
+  const isPending = row.status === DocumentStatusEnum.PENDING;
+  const isComplete = isDocumentCompleted(row.status);
+  const isSigned = recipient?.signingStatus === SigningStatus.SIGNED;
+  const role = recipient?.role;
+
+  if (!recipient) {
+    return null;
+  }
+
+  // TODO: Consider if want to keep this logic for hiding viewing for CC'ers
+  if (recipient?.role === RecipientRole.CC && isComplete === false) {
+    return null;
+  }
+
+  return match({
+    isPending,
+    isComplete,
+    isSigned,
+    internalVersion: row.internalVersion,
+  })
+    .with({ isPending: true, isSigned: false }, () => (
+      <Button className="w-32" asChild>
+        <a href={`/sign/${recipient?.token}`}>
+          {match(role)
+            .with(RecipientRole.SIGNER, () => (
+              <>
+                <PencilIcon className="mr-2 -ml-1 h-4 w-4" />
+                <Trans>Sign</Trans>
+              </>
+            ))
+            .with(RecipientRole.APPROVER, () => (
+              <>
+                <CheckCircleIcon className="mr-2 -ml-1 h-4 w-4" />
+                <Trans>Approve</Trans>
+              </>
+            ))
+            .otherwise(() => (
+              <>
+                <EyeIcon className="mr-2 -ml-1 h-4 w-4" />
+                <Trans>View</Trans>
+              </>
+            ))}
+        </a>
+      </Button>
+    ))
+    .with({ isPending: true, isSigned: true }, () => (
+      <Button className="w-32" disabled={true}>
+        <EyeIcon className="mr-2 -ml-1 h-4 w-4" />
+        <Trans>View</Trans>
+      </Button>
+    ))
+    .with({ isComplete: true }, () => (
+      <EnvelopeDownloadDialog
+        envelopeId={row.envelopeId}
+        envelopeStatus={row.status}
+        token={recipient?.token}
+        trigger={
+          <Button className="w-32">
+            <DownloadIcon className="mr-2 -ml-1 inline h-4 w-4" />
+            <Trans>Download</Trans>
+          </Button>
+        }
+      />
+    ))
+    .otherwise(() => <div></div>);
+};

@@ -1,0 +1,1 @@
+export function useAnalytics() { return { capture: (..._args: unknown[]) => {}, captureException: (..._args: unknown[]) => {}, startSessionRecording: (..._args: unknown[]) => {}, stopSessionRecording: () => {} }; }

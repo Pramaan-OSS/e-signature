@@ -1,0 +1,8 @@
+{
+  "extends": "@e-sign/tsconfig/react-library.json",
+  "compilerOptions": {
+    "types": ["@e-sign/tsconfig/process-env.d.ts"]
+  },
+  "include": ["**/*.ts", "**/*.tsx", "**/*.d.ts"],
+  "exclude": ["dist", "build", "node_modules"]
+}

@@ -1,0 +1,161 @@
+import { formatAvatarUrl } from '@e-sign/lib/utils/avatars';
+import { extractInitials } from '@e-sign/lib/utils/recipient-formatter';
+import { trpc } from '@e-sign/trpc/react';
+import { Alert } from '@e-sign/ui/primitives/alert';
+import { AvatarWithText } from '@e-sign/ui/primitives/avatar';
+import { Button } from '@e-sign/ui/primitives/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@e-sign/ui/primitives/dialog';
+import { useToast } from '@e-sign/ui/primitives/use-toast';
+import { msg } from '@lingui/core/macro';
+import { useLingui } from '@lingui/react';
+import { Trans } from '@lingui/react/macro';
+import type { Team, TeamEmail, TeamEmailVerification } from '@prisma/client';
+import { useState } from 'react';
+import { useRevalidator } from 'react-router';
+
+export type TeamEmailDeleteDialogProps = {
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  trigger?: React.ReactNode;
+  teamName: string;
+  team: Pick<Team, 'id' | 'avatarImageId' | 'name'>;
+  teamEmail: Pick<TeamEmail, 'email' | 'name'> | null;
+  emailVerification: Pick<TeamEmailVerification, 'email' | 'name' | 'expiresAt'> | null;
+};
+
+export const TeamEmailDeleteDialog = ({
+  trigger,
+  teamName,
+  team,
+  teamEmail,
+  emailVerification,
+  open: controlledOpen,
+  onOpenChange: onControlledOpenChange,
+}: TeamEmailDeleteDialogProps) => {
+  const [localOpen, setLocalOpen] = useState(false);
+  const open = controlledOpen ?? localOpen;
+  const setOpen = (value: boolean) => {
+    setLocalOpen(value);
+    onControlledOpenChange?.(value);
+  };
+
+  const { _ } = useLingui();
+  const { toast } = useToast();
+  const { revalidate } = useRevalidator();
+
+  const { mutateAsync: deleteTeamEmail, isPending: isDeletingTeamEmail } = trpc.team.email.delete.useMutation({
+    onSuccess: () => {
+      toast({
+        title: _(msg`Success`),
+        description: _(msg`Team email has been removed`),
+        duration: 5000,
+      });
+    },
+    onError: () => {
+      toast({
+        title: _(msg`Something went wrong`),
+        description: _(msg`Unable to remove team email at this time. Please try again.`),
+        variant: 'destructive',
+        duration: 10000,
+      });
+    },
+  });
+
+  const { mutateAsync: deleteTeamEmailVerification, isPending: isDeletingTeamEmailVerification } =
+    trpc.team.email.verification.delete.useMutation({
+      onSuccess: () => {
+        toast({
+          title: _(msg`Success`),
+          description: _(msg`Email verification has been removed`),
+          duration: 5000,
+        });
+      },
+      onError: () => {
+        toast({
+          title: _(msg`Something went wrong`),
+          description: _(msg`Unable to remove email verification at this time. Please try again.`),
+          variant: 'destructive',
+          duration: 10000,
+        });
+      },
+    });
+
+  const onRemove = async () => {
+    if (teamEmail) {
+      await deleteTeamEmail({ teamId: team.id });
+    }
+
+    if (emailVerification) {
+      await deleteTeamEmailVerification({ teamId: team.id });
+    }
+
+    await revalidate();
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(value) => setOpen(value)}>
+      {controlledOpen === undefined && (
+        <DialogTrigger asChild>
+          {trigger ?? (
+            <Button variant="destructive">
+              <Trans>Remove team email</Trans>
+            </Button>
+          )}
+        </DialogTrigger>
+      )}
+
+      <DialogContent position="center">
+        <DialogHeader>
+          <DialogTitle>
+            <Trans>Are you sure?</Trans>
+          </DialogTitle>
+
+          <DialogDescription className="mt-4">
+            <Trans>
+              You are about to delete the following team email from <span className="font-semibold">{teamName}</span>.
+            </Trans>
+          </DialogDescription>
+        </DialogHeader>
+
+        <Alert variant="neutral" padding="tight">
+          <AvatarWithText
+            avatarClass="h-12 w-12"
+            avatarSrc={formatAvatarUrl(team.avatarImageId)}
+            avatarFallback={extractInitials((teamEmail?.name || emailVerification?.name) ?? '')}
+            primaryText={
+              <span className="font-semibold text-foreground/80 text-sm">
+                {teamEmail?.name || emailVerification?.name}
+              </span>
+            }
+            secondaryText={<span className="text-sm">{teamEmail?.email || emailVerification?.email}</span>}
+          />
+        </Alert>
+
+        <fieldset disabled={isDeletingTeamEmail || isDeletingTeamEmailVerification}>
+          <DialogFooter>
+            <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
+              <Trans>Cancel</Trans>
+            </Button>
+
+            <Button
+              type="submit"
+              variant="destructive"
+              loading={isDeletingTeamEmail || isDeletingTeamEmailVerification}
+              onClick={async () => onRemove()}
+            >
+              <Trans>Remove</Trans>
+            </Button>
+          </DialogFooter>
+        </fieldset>
+      </DialogContent>
+    </Dialog>
+  );
+};

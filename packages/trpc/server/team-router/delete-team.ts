@@ -1,0 +1,54 @@
+import { AppError, AppErrorCode } from '@e-sign/lib/errors/app-error';
+import { orphanEnvelopes } from '@e-sign/lib/server-only/envelope/orphan-envelopes';
+import { transferTeamEnvelopes } from '@e-sign/lib/server-only/envelope/transfer-team-envelopes';
+import { deleteTeam } from '@e-sign/lib/server-only/team/delete-team';
+import { getTeamById } from '@e-sign/lib/server-only/team/get-team';
+import { TeamMemberRole } from '@prisma/client';
+
+import { authenticatedProcedure } from '../trpc';
+import { ZDeleteTeamRequestSchema, ZDeleteTeamResponseSchema } from './delete-team.types';
+
+export const deleteTeamRoute = authenticatedProcedure
+  // .meta(deleteTeamMeta)
+  .input(ZDeleteTeamRequestSchema)
+  .output(ZDeleteTeamResponseSchema)
+  .mutation(async ({ input, ctx }) => {
+    const { teamId, transferTeamId } = input;
+    const { user } = ctx;
+
+    const team = await getTeamById({ userId: user.id, teamId });
+
+    if (team.currentTeamRole !== TeamMemberRole.ADMIN) {
+      throw new AppError(AppErrorCode.UNAUTHORIZED, {
+        message: 'You are not allowed to delete this team',
+      });
+    }
+
+    ctx.logger.info({
+      input: {
+        teamId,
+      },
+    });
+
+    const transferTeam = transferTeamId
+      ? await getTeamById({ userId: user.id, teamId: transferTeamId }).catch(() => {
+          throw new AppError(AppErrorCode.INVALID_REQUEST, {
+            message: 'Invalid transfer team ID',
+          });
+        })
+      : undefined;
+
+    if (transferTeam) {
+      await transferTeamEnvelopes({
+        sourceTeamId: teamId,
+        targetTeamId: transferTeam.id,
+      });
+    } else {
+      await orphanEnvelopes({ teamId });
+    }
+
+    await deleteTeam({
+      userId: user.id,
+      teamId,
+    });
+  });

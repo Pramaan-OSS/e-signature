@@ -1,0 +1,123 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "tasks": {
+    "build": {
+      "dependsOn": [
+        "prebuild",
+        "^build"
+      ],
+      "outputs": [
+        ".next/**",
+        "!.next/cache/**"
+      ]
+    },
+    "prebuild": {
+      "cache": false,
+      "dependsOn": [
+        "^prebuild"
+      ]
+    },
+    "lint": {
+      "cache": false
+    },
+    "lint:fix": {
+      "cache": false
+    },
+    "clean": {
+      "cache": false
+    },
+    "dev": {
+      "cache": false,
+      "persistent": true
+    },
+    "start": {
+      "dependsOn": [
+        "^build"
+      ],
+      "cache": false,
+      "persistent": true
+    },
+    "dev:test": {
+      "cache": false
+    },
+    "test:e2e": {
+      "dependsOn": [
+        "^build"
+      ],
+      "cache": false
+    }
+  },
+  "globalDependencies": [
+    "**/.env.*local"
+  ],
+  "globalEnv": [
+    "APP_VERSION",
+    "PORT",
+    "NEXT_PRIVATE_ENCRYPTION_KEY",
+    "NEXT_PRIVATE_ENCRYPTION_SECONDARY_KEY",
+    "NEXTAUTH_SECRET",
+    "NEXT_PUBLIC_PROJECT",
+    "NEXT_PUBLIC_WEBAPP_URL",
+    "NEXT_PRIVATE_INTERNAL_WEBAPP_URL",
+    "NEXT_PUBLIC_FEATURE_BILLING_ENABLED",
+    "NEXT_PUBLIC_DISABLE_SIGNUP",
+    "NEXT_PUBLIC_DISABLE_EMAIL_PASSWORD_SIGNUP",
+    "NEXT_PUBLIC_DISABLE_GOOGLE_SIGNUP",
+    "NEXT_PUBLIC_DISABLE_MICROSOFT_SIGNUP",
+    "NEXT_PRIVATE_ALLOWED_SIGNUP_DOMAINS",
+    "NEXT_PUBLIC_DISABLE_SIGNIN",
+    "NEXT_PUBLIC_DISABLE_EMAIL_PASSWORD_SIGNIN",
+    "NEXT_PUBLIC_DISABLE_GOOGLE_SIGNIN",
+    "NEXT_PUBLIC_DISABLE_MICROSOFT_SIGNIN",
+    "NEXT_PRIVATE_PLAIN_API_KEY",
+    "NEXT_PUBLIC_DOCUMENT_SIZE_UPLOAD_LIMIT",
+    "NEXT_PRIVATE_DATABASE_URL",
+    "NEXT_PRIVATE_DATABASE_REPLICA_URLS",
+    "NEXT_PRIVATE_DIRECT_DATABASE_URL",
+    "NEXT_PRIVATE_LOGGER_FILE_PATH",
+    "NEXT_PRIVATE_SIGNING_TRANSPORT",
+    "NEXT_PRIVATE_SIGNING_PASSPHRASE",
+    "NEXT_PRIVATE_SIGNING_LOCAL_FILE_PATH",
+    "NEXT_PRIVATE_SIGNING_LOCAL_FILE_CONTENTS",
+    "NEXT_PUBLIC_SIGNING_CONTACT_INFO",
+    "NEXT_PRIVATE_USE_LEGACY_SIGNING_SUBFILTER",
+    "NEXT_PRIVATE_GOOGLE_CLIENT_ID",
+    "NEXT_PRIVATE_GOOGLE_CLIENT_SECRET",
+    "NEXT_PRIVATE_MICROSOFT_CLIENT_ID",
+    "NEXT_PRIVATE_MICROSOFT_CLIENT_SECRET",
+    "NEXT_PUBLIC_UPLOAD_TRANSPORT",
+    "NEXT_PRIVATE_UPLOAD_BUCKET",
+    "NEXT_PRIVATE_UPLOAD_DISTRIBUTION_DOMAIN",
+    "NEXT_PRIVATE_UPLOAD_DISTRIBUTION_KEY_ID",
+    "NEXT_PRIVATE_UPLOAD_DISTRIBUTION_KEY_CONTENTS",
+    "NEXT_PRIVATE_SIGNING_TRANSPORT",
+    "NEXT_PRIVATE_SIGNING_PASSPHRASE",
+    "NEXT_PRIVATE_SIGNING_LOCAL_FILE_PATH",
+    "NEXT_PRIVATE_SIGNING_LOCAL_FILE_CONTENTS",
+    "NEXT_PRIVATE_SIGNING_LOCAL_FILE_ENCODING",
+    "NEXT_PRIVATE_SMTP_FROM_NAME",
+    "NEXT_PRIVATE_SMTP_FROM_ADDRESS",
+    "NEXT_PRIVATE_GITHUB_TOKEN",
+    "NEXT_PRIVATE_JOBS_PROVIDER",
+    "NEXT_PRIVATE_REDIS_URL",
+    "NEXT_PRIVATE_REDIS_PREFIX",
+    "NEXT_PRIVATE_BULLMQ_CONCURRENCY",
+    "CI",
+    "NODE_ENV",
+    "NEXT_IGNORE_INCORRECT_LOCKFILE",
+    "POSTGRES_URL",
+    "DATABASE_URL",
+    "DATABASE_URL_UNPOOLED",
+    "POSTGRES_PRISMA_URL",
+    "POSTGRES_URL_NON_POOLING",
+    "GOOGLE_APPLICATION_CREDENTIALS",
+    "E2E_TEST_AUTHENTICATE_USERNAME",
+    "E2E_TEST_AUTHENTICATE_USER_EMAIL",
+    "E2E_TEST_AUTHENTICATE_USER_PASSWORD",
+    "DANGEROUS_BYPASS_RATE_LIMITS",
+    "NEXT_PRIVATE_WEBHOOK_SSRF_BYPASS_HOSTS",
+    "PRAMAAN_API_KEY",
+    "PRAMAAN_BASE_URL",
+    "PRAMAAN_STORAGE_BUCKET"
+  ]
+}

@@ -1,0 +1,50 @@
+import { ZDocumentLiteSchema } from '@e-sign/lib/types/document';
+import { ZDocumentEmailSettingsSchema } from '@e-sign/lib/types/document-email';
+import {
+  ZDocumentMetaDateFormatSchema,
+  ZDocumentMetaDistributionMethodSchema,
+  ZDocumentMetaLanguageSchema,
+  ZDocumentMetaMessageSchema,
+  ZDocumentMetaRedirectUrlSchema,
+  ZDocumentMetaSubjectSchema,
+  ZDocumentMetaTimezoneSchema,
+} from '@e-sign/lib/types/document-meta';
+import { zEmail } from '@e-sign/lib/utils/zod';
+import { z } from 'zod';
+
+import type { TrpcRouteMeta } from '../trpc';
+
+export const distributeDocumentMeta: TrpcRouteMeta = {
+  openapi: {
+    method: 'POST',
+    path: '/document/distribute',
+    summary: 'Distribute document',
+    description:
+      'Deprecated: this endpoint is being replaced by the Envelope API. See /help for the migration guide. Send the document out to recipients based on your distribution method',
+    tags: ['Document'],
+    deprecated: true,
+  },
+};
+
+export const ZDistributeDocumentRequestSchema = z.object({
+  documentId: z.number().describe('The ID of the document to send.'),
+  meta: z
+    .object({
+      subject: ZDocumentMetaSubjectSchema.optional(),
+      message: ZDocumentMetaMessageSchema.optional(),
+      timezone: ZDocumentMetaTimezoneSchema.optional(),
+      dateFormat: ZDocumentMetaDateFormatSchema.optional(),
+      distributionMethod: ZDocumentMetaDistributionMethodSchema.optional(),
+      redirectUrl: ZDocumentMetaRedirectUrlSchema.optional(),
+      language: ZDocumentMetaLanguageSchema.optional(),
+      emailId: z.string().nullish(),
+      emailReplyTo: zEmail().nullish(),
+      emailSettings: ZDocumentEmailSettingsSchema.optional(),
+    })
+    .optional(),
+});
+
+export const ZDistributeDocumentResponseSchema = ZDocumentLiteSchema;
+
+export type TDistributeDocumentRequest = z.infer<typeof ZDistributeDocumentRequestSchema>;
+export type TDistributeDocumentResponse = z.infer<typeof ZDistributeDocumentResponseSchema>;

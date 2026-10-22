@@ -1,0 +1,14 @@
+import * as React from 'react';
+import { Dialog, DialogTrigger, DialogClose, DialogContent, DialogTitle, DialogDescription, DialogHeader, DialogFooter, DialogPortal, DialogOverlay } from './dialog';
+import { Button } from './button';
+export const AlertDialog = Dialog;
+export const AlertDialogTrigger = DialogTrigger;
+export const AlertDialogContent = DialogContent;
+export const AlertDialogTitle = DialogTitle;
+export const AlertDialogDescription = DialogDescription;
+export const AlertDialogHeader = DialogHeader;
+export const AlertDialogFooter = DialogFooter;
+export const AlertDialogPortal = DialogPortal;
+export const AlertDialogOverlay = DialogOverlay;
+export const AlertDialogAction = React.forwardRef<HTMLButtonElement, React.ComponentProps<typeof Button>>((props, ref) => <DialogClose asChild><Button ref={ref} {...props} /></DialogClose>);
+export const AlertDialogCancel = React.forwardRef<HTMLButtonElement, React.ComponentProps<typeof Button>>((props, ref) => <DialogClose asChild><Button variant="outline" ref={ref} {...props} /></DialogClose>);

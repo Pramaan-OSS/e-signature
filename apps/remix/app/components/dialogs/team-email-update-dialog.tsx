@@ -1,0 +1,167 @@
+import { trpc } from '@e-sign/trpc/react';
+import { ZUpdateTeamEmailMutationSchema } from '@e-sign/trpc/server/team-router/schema';
+import { Button } from '@e-sign/ui/primitives/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@e-sign/ui/primitives/dialog';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@e-sign/ui/primitives/form/form';
+import { Input } from '@e-sign/ui/primitives/input';
+import { useToast } from '@e-sign/ui/primitives/use-toast';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { Trans, useLingui } from '@lingui/react/macro';
+import type { TeamEmail } from '@prisma/client';
+import type * as DialogPrimitive from '@radix-ui/react-dialog';
+import { useEffect, useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { useRevalidator } from 'react-router';
+import type { z } from 'zod';
+
+export type TeamEmailUpdateDialogProps = {
+  teamId: number;
+  teamEmail: Pick<TeamEmail, 'email' | 'name'>;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  trigger?: React.ReactNode;
+} & Omit<DialogPrimitive.DialogProps, 'children'>;
+
+const ZUpdateTeamEmailFormSchema = ZUpdateTeamEmailMutationSchema.pick({
+  data: true,
+}).shape.data;
+
+type TUpdateTeamEmailFormSchema = z.infer<typeof ZUpdateTeamEmailFormSchema>;
+
+export const TeamEmailUpdateDialog = ({
+  teamId,
+  teamEmail,
+  trigger,
+  open: controlledOpen,
+  onOpenChange: onControlledOpenChange,
+  ...props
+}: TeamEmailUpdateDialogProps) => {
+  const [localOpen, setLocalOpen] = useState(false);
+  const open = controlledOpen ?? localOpen;
+  const setOpen = (value: boolean) => {
+    setLocalOpen(value);
+    onControlledOpenChange?.(value);
+  };
+
+  const { t } = useLingui();
+  const { toast } = useToast();
+  const { revalidate } = useRevalidator();
+
+  const form = useForm<TUpdateTeamEmailFormSchema>({
+    resolver: zodResolver(ZUpdateTeamEmailFormSchema),
+    defaultValues: {
+      name: teamEmail.name,
+    },
+    mode: 'onSubmit',
+  });
+
+  const { mutateAsync: updateTeamEmail } = trpc.team.email.update.useMutation();
+
+  const onFormSubmit = async ({ name }: TUpdateTeamEmailFormSchema) => {
+    try {
+      await updateTeamEmail({
+        teamId,
+        data: {
+          name,
+        },
+      });
+
+      toast({
+        title: t`Success`,
+        description: t`Team email was updated.`,
+        duration: 5000,
+      });
+
+      await revalidate();
+
+      setOpen(false);
+    } catch (err) {
+      toast({
+        title: t`An unknown error occurred`,
+        description: t`We encountered an unknown error while attempting update the team email. Please try again later.`,
+        variant: 'destructive',
+      });
+    }
+  };
+
+  useEffect(() => {
+    if (!open) {
+      form.reset();
+    }
+  }, [open, form]);
+
+  return (
+    <Dialog {...props} open={open} onOpenChange={(value) => !form.formState.isSubmitting && setOpen(value)}>
+      {controlledOpen === undefined && (
+        <DialogTrigger onClick={(e) => e.stopPropagation()} asChild>
+          {trigger ?? (
+            <Button variant="outline" className="bg-background">
+              <Trans>Update team email</Trans>
+            </Button>
+          )}
+        </DialogTrigger>
+      )}
+
+      <DialogContent position="center">
+        <DialogHeader>
+          <DialogTitle>
+            <Trans>Update team email</Trans>
+          </DialogTitle>
+
+          <DialogDescription className="mt-4">
+            <Trans>To change the email you must remove and add a new email address.</Trans>
+          </DialogDescription>
+        </DialogHeader>
+
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onFormSubmit)}>
+            <fieldset className="flex h-full flex-col space-y-4" disabled={form.formState.isSubmitting}>
+              <FormField
+                control={form.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel required>
+                      <Trans>Name</Trans>
+                    </FormLabel>
+                    <FormControl>
+                      <Input className="bg-background" placeholder={t`eg. Legal`} {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormItem>
+                <FormLabel required>
+                  <Trans>Email</Trans>
+                </FormLabel>
+                <FormControl>
+                  <Input className="bg-background" value={teamEmail.email} disabled={true} />
+                </FormControl>
+              </FormItem>
+
+              <DialogFooter>
+                <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
+                  <Trans>Cancel</Trans>
+                </Button>
+
+                <Button type="submit" loading={form.formState.isSubmitting}>
+                  <Trans>Update</Trans>
+                </Button>
+              </DialogFooter>
+            </fieldset>
+          </form>
+        </Form>
+      </DialogContent>
+    </Dialog>
+  );
+};

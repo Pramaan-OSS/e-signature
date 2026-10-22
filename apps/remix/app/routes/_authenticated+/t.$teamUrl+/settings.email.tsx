@@ -1,0 +1,69 @@
+import { trpc } from '@e-sign/trpc/react';
+import { SpinnerBox } from '@e-sign/ui/primitives/spinner';
+import { useToast } from '@e-sign/ui/primitives/use-toast';
+import { useLingui } from '@lingui/react/macro';
+
+import { EmailPreferencesForm, type TEmailPreferencesFormSchema } from '~/components/forms/email-preferences-form';
+import { SettingsHeader } from '~/components/general/settings-header';
+import { useCurrentTeam } from '~/providers/team';
+
+export default function TeamEmailSettingsGeneral() {
+  const { t } = useLingui();
+  const { toast } = useToast();
+
+  const team = useCurrentTeam();
+
+  const { data: teamWithSettings, isLoading: isLoadingTeam } = trpc.team.get.useQuery({
+    teamReference: team.url,
+  });
+
+  const { mutateAsync: updateTeamSettings } = trpc.team.settings.update.useMutation();
+
+  const onEmailPreferencesSubmit = async (data: TEmailPreferencesFormSchema) => {
+    try {
+      const { emailId, emailReplyTo, emailDocumentSettings, includeSenderDetails } = data;
+
+      await updateTeamSettings({
+        teamId: team.id,
+        data: {
+          emailId,
+          emailReplyTo,
+          // emailReplyToName,
+          emailDocumentSettings,
+          includeSenderDetails,
+        },
+      });
+
+      toast({
+        title: t`Email preferences updated`,
+        description: t`Your email preferences have been updated`,
+      });
+    } catch (err) {
+      toast({
+        title: t`Something went wrong!`,
+        description: t`We were unable to update your email preferences at this time, please try again later`,
+        variant: 'destructive',
+      });
+
+      throw err;
+    }
+  };
+
+  if (isLoadingTeam || !teamWithSettings) {
+    return <SpinnerBox />;
+  }
+
+  return (
+    <div>
+      <SettingsHeader title={t`Email Preferences`} subtitle={t`You can manage your email preferences here.`} />
+
+      <section>
+        <EmailPreferencesForm
+          canInherit={true}
+          settings={teamWithSettings.teamSettings}
+          onFormSubmit={onEmailPreferencesSubmit}
+        />
+      </section>
+    </div>
+  );
+}

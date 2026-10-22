@@ -1,0 +1,249 @@
+import { seedTeam, seedTeamMember } from '@e-sign/prisma/seed/teams';
+import { seedTemplate } from '@e-sign/prisma/seed/templates';
+import { expect, test } from '@playwright/test';
+import { TeamMemberRole } from '@prisma/client';
+
+import { apiSignin } from '../fixtures/authentication';
+import { openDropdownMenu } from '../fixtures/generic';
+
+test('[TEMPLATES]: view templates', async ({ page }) => {
+  const { team, owner, organisation } = await seedTeam({
+    createTeamMembers: 1,
+  });
+
+  const teamMemberUser = await seedTeamMember({
+    teamId: team.id,
+    role: TeamMemberRole.MEMBER,
+  });
+
+  // Should be visible to team members.
+  await seedTemplate({
+    title: 'Team template 1',
+    userId: owner.id,
+    teamId: team.id,
+  });
+
+  // Should be visible to team members.
+  await seedTemplate({
+    title: 'Team template 2',
+    userId: teamMemberUser.id,
+    teamId: team.id,
+  });
+
+  await apiSignin({
+    page,
+    email: owner.email,
+    redirectPath: `/t/${team.url}/templates`,
+  });
+
+  // Owner should see both team templates.
+  await expect(page.getByTestId('data-table-count')).toContainText('Showing 2 results');
+});
+
+test('[TEMPLATES]: search templates by title', async ({ page }) => {
+  const { team, owner } = await seedTeam();
+
+  await seedTemplate({
+    title: 'Quarterly Report Template',
+    userId: owner.id,
+    teamId: team.id,
+  });
+
+  await seedTemplate({
+    title: 'Annual Budget Template',
+    userId: owner.id,
+    teamId: team.id,
+  });
+
+  await apiSignin({
+    page,
+    email: owner.email,
+    redirectPath: `/t/${team.url}/templates`,
+  });
+
+  await expect(page.getByTestId('data-table-count')).toContainText('Showing 2 results');
+
+  await page.getByPlaceholder('Search templates...').fill('Quarterly');
+  await page.waitForURL(/query=Quarterly/);
+
+  await expect(page.getByTestId('data-table-count')).toContainText('Showing 1 result');
+  await expect(page.getByRole('link', { name: 'Quarterly Report Template' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Annual Budget Template' })).not.toBeVisible();
+
+  // Clearing the search should restore the full list and drop the URL param.
+  await page.getByPlaceholder('Search templates...').fill('');
+  await page.waitForURL((url) => !url.searchParams.has('query'));
+
+  await expect(page.getByTestId('data-table-count')).toContainText('Showing 2 results');
+});
+
+test('[TEMPLATES]: filter templates by owner', async ({ page }) => {
+  const { team, owner } = await seedTeam();
+
+  const teamMemberUser = await seedTeamMember({
+    teamId: team.id,
+    name: 'Filter Member',
+    role: TeamMemberRole.MEMBER,
+  });
+
+  await seedTemplate({
+    title: 'Owner Template',
+    userId: owner.id,
+    teamId: team.id,
+  });
+
+  await seedTemplate({
+    title: 'Member Template',
+    userId: teamMemberUser.id,
+    teamId: team.id,
+  });
+
+  await apiSignin({
+    page,
+    email: owner.email,
+    redirectPath: `/t/${team.url}/templates`,
+  });
+
+  await expect(page.getByTestId('data-table-count')).toContainText('Showing 2 results');
+
+  await page.getByTestId('templates-table-owner-filter').click();
+  await page.getByRole('option', { name: 'Filter Member' }).click();
+  await page.waitForURL(/ownerIds=/);
+  await page.keyboard.press('Escape');
+
+  await expect(page.getByTestId('data-table-count')).toContainText('Showing 1 result');
+  await expect(page.getByRole('link', { name: 'Member Template' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Owner Template' })).not.toBeVisible();
+
+  // Reset should clear the owner filter.
+  await page.getByRole('button', { name: 'Reset' }).click();
+  await page.waitForURL((url) => !url.searchParams.has('ownerIds'));
+
+  await expect(page.getByTestId('data-table-count')).toContainText('Showing 2 results');
+});
+
+test('[TEMPLATES]: delete template', async ({ page }) => {
+  const { team, owner, organisation } = await seedTeam({
+    createTeamMembers: 1,
+  });
+
+  const teamMemberUser = await seedTeamMember({
+    teamId: team.id,
+    role: TeamMemberRole.MEMBER,
+  });
+
+  // Should be visible to team members.
+  await seedTemplate({
+    title: 'Team template 1',
+    userId: owner.id,
+    teamId: team.id,
+  });
+
+  // Should be visible to team members.
+  await seedTemplate({
+    title: 'Team template 2',
+    userId: teamMemberUser.id,
+    teamId: team.id,
+  });
+
+  await apiSignin({
+    page,
+    email: owner.email,
+    redirectPath: `/t/${team.url}/templates`,
+  });
+
+  for (const template of ['Team template 1', 'Team template 2']) {
+    const actionBtn = page
+      .getByRole('row', { name: template })
+      .getByRole('cell', { name: 'Use Template' })
+      .getByRole('button')
+      .nth(1);
+    await openDropdownMenu(page, actionBtn);
+
+    await expect(page.getByRole('menuitem', { name: 'Delete' })).toBeVisible();
+    await page.getByRole('menuitem', { name: 'Delete' }).click();
+    await page.getByRole('button', { name: 'Delete' }).click();
+    await expect(page.getByText('Template deleted').first()).toBeVisible();
+
+    await page.reload();
+  }
+});
+
+test('[TEMPLATES]: duplicate template', async ({ page }) => {
+  const { team, owner, organisation } = await seedTeam({
+    createTeamMembers: 1,
+  });
+
+  const teamMemberUser = await seedTeamMember({
+    teamId: team.id,
+    role: TeamMemberRole.MEMBER,
+  });
+
+  // Should be visible to team members.
+  await seedTemplate({
+    title: 'Team template 1',
+    userId: teamMemberUser.id,
+    teamId: team.id,
+  });
+
+  await apiSignin({
+    page,
+    email: owner.email,
+    redirectPath: `/t/${team.url}/templates`,
+  });
+
+  // Duplicate team template.
+  const actionBtn = page.getByRole('cell', { name: 'Use Template' }).getByRole('button').nth(1);
+  await openDropdownMenu(page, actionBtn);
+  await expect(page.getByRole('menuitem', { name: 'Duplicate' })).toBeVisible();
+  await page.getByRole('menuitem', { name: 'Duplicate' }).click();
+  await page.getByRole('button', { name: 'Duplicate' }).click();
+  await expect(page.getByText('Template Duplicated').first()).toBeVisible();
+
+  // The dialog should navigate to the new template's edit page.
+  await page.waitForURL(/\/templates\/.*\/edit/);
+
+  // Navigate back to the templates list and verify the count is now 2.
+  await page.goto(`/t/${team.url}/templates`);
+  await expect(page.getByTestId('data-table-count')).toContainText('Showing 2 results');
+});
+
+test('[TEMPLATES]: use template', async ({ page }) => {
+  const { team, owner, organisation } = await seedTeam({
+    createTeamMembers: 1,
+  });
+
+  const teamMemberUser = await seedTeamMember({
+    teamId: team.id,
+    role: TeamMemberRole.MEMBER,
+  });
+
+  // Should be visible to team members.
+  await seedTemplate({
+    title: 'Team template 1',
+    userId: teamMemberUser.id,
+    teamId: team.id,
+  });
+
+  await apiSignin({
+    page,
+    email: owner.email,
+    redirectPath: `/t/${team.url}/templates`,
+  });
+
+  // Use team template.
+  await page.getByRole('button', { name: 'Use Template' }).click();
+
+  // Enter template values.
+  // Get input with Email label placeholder.
+  await page.getByLabel('Email').click();
+  await page.getByLabel('Email').fill(teamMemberUser.email);
+  await page.getByRole('textbox', { name: 'Name', exact: true }).click();
+  await page.getByRole('textbox', { name: 'Name', exact: true }).fill('name');
+
+  await page.getByRole('button', { name: 'Create as draft' }).click();
+  await page.waitForURL(/\/t\/.+\/documents/);
+  await page.getByRole('main').getByRole('link', { name: 'Documents' }).click();
+  await page.waitForURL(`/t/${team.url}/documents`);
+  await expect(page.getByTestId('data-table-count')).toContainText('Showing 1 result');
+});

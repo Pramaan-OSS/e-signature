@@ -1,0 +1,57 @@
+import { mailer } from '@e-sign/email/mailer';
+import { ResetPasswordTemplate } from '@e-sign/email/templates/reset-password';
+import { prisma } from '@e-sign/prisma';
+import { msg } from '@lingui/core/macro';
+import { createElement } from 'react';
+import { match } from 'ts-pattern';
+
+import { getI18nInstance } from '../../client-only/providers/i18n-server';
+import { NEXT_PUBLIC_WEBAPP_URL } from '../../constants/app';
+import { E_SIGN_INTERNAL_EMAIL } from '../../constants/email';
+import type { TPasswordChangeSource } from '../../jobs/definitions/emails/send-password-reset-success-email';
+import { renderEmailWithI18N } from '../../utils/render-email-with-i18n';
+
+export interface SendResetPasswordOptions {
+  userId: number;
+  source: TPasswordChangeSource;
+}
+
+export const sendResetPassword = async ({ userId, source }: SendResetPasswordOptions) => {
+  const user = await prisma.user.findFirstOrThrow({
+    where: {
+      id: userId,
+    },
+  });
+
+  const assetBaseUrl = NEXT_PUBLIC_WEBAPP_URL() || 'http://localhost:3000';
+
+  const template = createElement(ResetPasswordTemplate, {
+    assetBaseUrl,
+    userEmail: user.email,
+    userName: user.name || '',
+    source,
+  });
+
+  const [html, text] = await Promise.all([
+    renderEmailWithI18N(template),
+    renderEmailWithI18N(template, { plainText: true }),
+  ]);
+
+  const i18n = await getI18nInstance();
+
+  const subject = match(source)
+    .with('RESET', () => i18n._(msg`Password Reset Success!`))
+    .with('UPDATE', () => i18n._(msg`Your password was changed`))
+    .exhaustive();
+
+  return await mailer.sendMail({
+    to: {
+      address: user.email,
+      name: user.name || '',
+    },
+    from: E_SIGN_INTERNAL_EMAIL,
+    subject,
+    html,
+    text,
+  });
+};

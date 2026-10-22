@@ -1,0 +1,13 @@
+#!/bin/sh
+set -eu
+cd "$(dirname "$0")"
+if ! command -v docker >/dev/null 2>&1; then
+  printf 'Install Docker with Compose, then run ./start again.\n'; exit 1
+fi
+docker run --rm -v "$PWD:/workspace" -w /workspace node:24-bookworm node scripts/setup-local.mjs
+case "${1:-}" in
+  '') export E_SIGN_FAKE=0 ;;
+  --fake) export E_SIGN_FAKE=1 ;;
+  *) printf 'Usage: ./start [--fake]\n'; exit 1 ;;
+esac
+exec docker compose --env-file .env -f docker/local/compose.yml up --build

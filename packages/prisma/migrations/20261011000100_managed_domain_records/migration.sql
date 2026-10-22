@@ -1,0 +1,1 @@
+ALTER TABLE "EmailDomain" ADD COLUMN "dnsRecords" JSONB NOT NULL DEFAULT '[]';

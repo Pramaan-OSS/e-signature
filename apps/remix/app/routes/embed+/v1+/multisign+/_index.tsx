@@ -1,0 +1,345 @@
+import { getOptionalSession } from '@e-sign/auth/server/lib/utils/get-session';
+import { IS_INSTANCE_CSC_MODE } from '@e-sign/lib/constants/app';
+import { captureServerEvent } from '@e-sign/lib/server-only/analytics/capture-server-event';
+import { getDocumentAndSenderByToken } from '@e-sign/lib/server-only/document/get-document-by-token';
+import { getOrganisationClaimByTeamId } from '@e-sign/lib/server-only/organisation/get-organisation-claims';
+import { getRecipientByToken } from '@e-sign/lib/server-only/recipient/get-recipient-by-token';
+import { ZSignDocumentEmbedDataSchema } from '@e-sign/lib/types/embed-document-sign-schema';
+import { isTspEnvelope } from '@e-sign/lib/types/signature-level';
+import { fireAndForget } from '@e-sign/lib/universal/fire-and-forget';
+import { prisma } from '@e-sign/prisma';
+import { Alert, AlertDescription } from '@e-sign/ui/primitives/alert';
+import { Trans } from '@lingui/react/macro';
+import { SigningStatus } from '@prisma/client';
+import { useEffect, useLayoutEffect, useState } from 'react';
+import { useRevalidator } from 'react-router';
+
+import { BrandingLogo } from '~/components/general/branding-logo';
+import { DocumentSigningAuthProvider } from '~/components/general/document-signing/document-signing-auth-provider';
+import { DocumentSigningProvider } from '~/components/general/document-signing/document-signing-provider';
+import { DocumentSigningRecipientProvider } from '~/components/general/document-signing/document-signing-recipient-provider';
+import { injectCss } from '~/utils/css-vars';
+import { superLoaderJson, useSuperLoaderData } from '~/utils/super-json-loader';
+
+import { MultiSignDocumentList } from '../../../../components/embed/multisign/multi-sign-document-list';
+import { MultiSignDocumentSigningView } from '../../../../components/embed/multisign/multi-sign-document-signing-view';
+import type { Route } from './+types/_index';
+
+export async function loader({ request }: Route.LoaderArgs) {
+  const { user } = await getOptionalSession(request);
+
+  const url = new URL(request.url);
+
+  const tokens = url.searchParams.getAll('token');
+
+  const envelopes = await Promise.all(
+    tokens.map(async (token) => {
+      const document = await getDocumentAndSenderByToken({
+        token,
+      });
+
+      const recipient = await getRecipientByToken({ token });
+
+      return { document, recipient };
+    }),
+  );
+
+  // The CSC popup flow is only implemented by the v2 embed.
+  const hasUnsupportedTspEnvelope = IS_INSTANCE_CSC_MODE() && envelopes.some(({ document }) => isTspEnvelope(document));
+
+  // Check the first envelope for whitelabelling settings (assuming all docs are from same team)
+  const firstDocument = envelopes[0]?.document;
+
+  if (!firstDocument) {
+    captureServerEvent({
+      event: 'App: Embed Session Started',
+      userId: user?.id,
+      properties: {
+        type: 'signing',
+        version: 'v1',
+      },
+    });
+
+    return superLoaderJson({
+      envelopes,
+      user,
+      hidePoweredBy: false,
+      allowWhitelabelling: false,
+      hasUnsupportedTspEnvelope,
+    });
+  }
+
+  const organisationClaim = await getOrganisationClaimByTeamId({ teamId: firstDocument.teamId });
+
+  const allowWhitelabelling = organisationClaim.flags.embedSigningWhiteLabel;
+  const hidePoweredBy = organisationClaim.flags.hidePoweredBy;
+
+  fireAndForget(async () => {
+    const team = await prisma.team.findFirst({
+      where: {
+        id: firstDocument.teamId,
+      },
+      select: {
+        organisationId: true,
+      },
+    });
+
+    captureServerEvent({
+      event: 'App: Embed Session Started',
+      userId: user?.id,
+      organisationId: team?.organisationId,
+      teamId: firstDocument.teamId,
+      properties: {
+        type: 'signing',
+        version: 'v1',
+        envelopeId: firstDocument.envelopeId,
+      },
+    });
+  });
+
+  return superLoaderJson({
+    envelopes,
+    user,
+    hidePoweredBy,
+    allowWhitelabelling,
+    hasUnsupportedTspEnvelope,
+  });
+}
+
+export default function MultisignPage() {
+  const { envelopes, user, hidePoweredBy, allowWhitelabelling, hasUnsupportedTspEnvelope } =
+    useSuperLoaderData<typeof loader>();
+
+  const revalidator = useRevalidator();
+
+  const [selectedDocument, setSelectedDocument] = useState<(typeof envelopes)[number]['document'] | null>(null);
+
+  // Additional state for embed functionality
+  const [hasFinishedInit, setHasFinishedInit] = useState(false);
+  const [isNameLocked, setIsNameLocked] = useState(false);
+  const [allowDocumentRejection, setAllowDocumentRejection] = useState(false);
+  const [showOtherRecipientsCompletedFields, setShowOtherRecipientsCompletedFields] = useState(false);
+  const [embedFullName, setEmbedFullName] = useState('');
+
+  // Check if all documents are completed
+  const isCompleted = envelopes.every((envelope) => envelope.recipient.signingStatus === SigningStatus.SIGNED);
+
+  const selectedRecipient = selectedDocument
+    ? envelopes.find((e) => e.document.id === selectedDocument.id)?.recipient
+    : null;
+
+  const onSelectDocument = (document: (typeof envelopes)[number]['document']) => {
+    setSelectedDocument(document);
+  };
+
+  const onBackToDocumentList = () => {
+    setSelectedDocument(null);
+    // Revalidate to fetch fresh data when returning to document list
+    void revalidator.revalidate();
+  };
+
+  const onDocumentCompleted = (data: { token: string; documentId: number; recipientId: number }) => {
+    // Send postMessage for individual document completion
+    if (window.parent) {
+      window.parent.postMessage(
+        {
+          action: 'document-completed',
+          data: {
+            token: data.token,
+            documentId: data.documentId,
+            recipientId: data.recipientId,
+          },
+        },
+        '*',
+      );
+    }
+  };
+
+  const onDocumentRejected = (data: { token: string; documentId: number; recipientId: number; reason: string }) => {
+    // Send postMessage for document rejection
+    if (window.parent) {
+      window.parent.postMessage(
+        {
+          action: 'document-rejected',
+          data: {
+            token: data.token,
+            documentId: data.documentId,
+            recipientId: data.recipientId,
+            reason: data.reason,
+          },
+        },
+        '*',
+      );
+    }
+  };
+
+  const onDocumentError = () => {
+    // Send postMessage for document error
+    if (window.parent) {
+      window.parent.postMessage(
+        {
+          action: 'document-error',
+          data: null,
+        },
+        '*',
+      );
+    }
+  };
+
+  const onDocumentReady = () => {
+    // Send postMessage when document is ready
+    if (window.parent) {
+      window.parent.postMessage(
+        {
+          action: 'document-ready',
+          data: null,
+        },
+        '*',
+      );
+    }
+  };
+
+  const onAllDocumentsCompleted = () => {
+    // Send postMessage for all documents completion
+    if (window.parent) {
+      window.parent.postMessage(
+        {
+          action: 'all-documents-completed',
+          data: {
+            documents: envelopes.map((envelope) => ({
+              token: envelope.recipient.token,
+              documentId: envelope.document.id,
+              recipientId: envelope.recipient.id,
+              action:
+                envelope.recipient.signingStatus === SigningStatus.SIGNED ? 'document-completed' : 'document-rejected',
+              reason:
+                envelope.recipient.signingStatus === SigningStatus.REJECTED
+                  ? envelope.recipient.rejectionReason
+                  : undefined,
+            })),
+          },
+        },
+        '*',
+      );
+    }
+  };
+
+  useEffect(() => {
+    if (envelopes.every((envelope) => envelope.recipient.signingStatus !== SigningStatus.NOT_SIGNED)) {
+      onAllDocumentsCompleted();
+    }
+  }, [envelopes]);
+
+  useLayoutEffect(() => {
+    const hash = window.location.hash.slice(1);
+
+    try {
+      const data = ZSignDocumentEmbedDataSchema.parse(JSON.parse(decodeURIComponent(atob(hash))));
+
+      if (!isCompleted && data.name) {
+        setEmbedFullName(data.name);
+      }
+
+      // Since a recipient can be provided a name we can lock it without requiring
+      // a to be provided by the parent application, unlike direct templates.
+      setIsNameLocked(!!data.lockName);
+      setAllowDocumentRejection(!!data.allowDocumentRejection);
+      setShowOtherRecipientsCompletedFields(!!data.showOtherRecipientsCompletedFields);
+
+      if (data.darkModeDisabled) {
+        document.documentElement.classList.add('dark-mode-disabled');
+      }
+
+      if (allowWhitelabelling) {
+        injectCss({
+          css: data.css,
+          cssVars: data.cssVars,
+        });
+      }
+    } catch (err) {
+      console.error(err);
+    }
+
+    setHasFinishedInit(true);
+
+    // !: While the two setters are stable we still want to ensure we're avoiding
+    // !: re-renders.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  if (hasUnsupportedTspEnvelope) {
+    return (
+      <div className="flex min-h-[100dvh] w-full items-center justify-center p-4">
+        <Alert variant="destructive" className="w-full max-w-md">
+          <AlertDescription>
+            <Trans>Qualified electronic signatures are not supported in this embed.</Trans>
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
+
+  // If a document is selected, show the signing view
+  if (selectedDocument && selectedRecipient) {
+    // Determine the full name to use - prioritize embed data, then user name, then recipient name
+    const fullNameToUse =
+      embedFullName || (user?.email === selectedRecipient.email ? user?.name : selectedRecipient.name) || '';
+
+    return (
+      <div className="p-4">
+        <DocumentSigningProvider
+          email={selectedRecipient.email}
+          fullName={fullNameToUse}
+          signature={user?.email === selectedRecipient.email ? user?.signature : undefined}
+          typedSignatureEnabled={selectedDocument.documentMeta?.typedSignatureEnabled}
+          uploadSignatureEnabled={selectedDocument.documentMeta?.uploadSignatureEnabled}
+          drawSignatureEnabled={selectedDocument.documentMeta?.drawSignatureEnabled}
+        >
+          <DocumentSigningAuthProvider
+            documentAuthOptions={selectedDocument.authOptions}
+            recipient={selectedRecipient}
+            user={user}
+          >
+            <DocumentSigningRecipientProvider recipient={selectedRecipient} targetSigner={null}>
+              <MultiSignDocumentSigningView
+                token={selectedRecipient.token}
+                recipientId={selectedRecipient.id}
+                onBack={onBackToDocumentList}
+                onDocumentCompleted={onDocumentCompleted}
+                onDocumentRejected={onDocumentRejected}
+                onDocumentError={onDocumentError}
+                onDocumentReady={onDocumentReady}
+                isNameLocked={isNameLocked}
+              />
+            </DocumentSigningRecipientProvider>
+          </DocumentSigningAuthProvider>
+        </DocumentSigningProvider>
+
+        {!hidePoweredBy && (
+          <div className="fixed bottom-0 left-0 z-40 rounded-tr bg-primary px-2 py-1 font-medium text-primary-foreground text-xs opacity-60 hover:opacity-100">
+            <span>
+              <Trans>Powered by</Trans>
+            </span>
+            <BrandingLogo className="ml-2 inline-block h-[14px]" />
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Otherwise, show the document list
+  return (
+    <div className="p-4">
+      <MultiSignDocumentList envelopes={envelopes} onDocumentSelect={onSelectDocument} />
+
+      {!hidePoweredBy && (
+        <div className="fixed bottom-0 left-0 z-40 rounded-tr bg-primary px-2 py-1 font-medium text-primary-foreground text-xs opacity-60 hover:opacity-100">
+          <span>
+            <Trans>Powered by</Trans>
+          </span>
+          <BrandingLogo className="ml-2 inline-block h-[14px]" />
+        </div>
+      )}
+    </div>
+  );
+}

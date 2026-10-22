@@ -1,0 +1,46 @@
+name: e-sign-production
+services:
+  database:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?Set a database user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set a private database password}
+      POSTGRES_DB: ${POSTGRES_DB:?Set a database name}
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - database:/var/lib/postgresql/data
+  e-sign:
+    image: e-sign-local:latest
+    build:
+      context: ../..
+      dockerfile: docker/Dockerfile
+    depends_on:
+      database:
+        condition: service_healthy
+    environment:
+      PORT: "3000"
+      PRAMAAN_API_KEY: ${PRAMAAN_API_KEY:?Set the Pramaan key}
+      PRAMAAN_BASE_URL: ${PRAMAAN_BASE_URL:-https://api.pramaan.dev}
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:?Set a private session secret}
+      NEXT_PRIVATE_ENCRYPTION_KEY: ${NEXT_PRIVATE_ENCRYPTION_KEY:?Set a private encryption key}
+      NEXT_PRIVATE_ENCRYPTION_SECONDARY_KEY: ${NEXT_PRIVATE_ENCRYPTION_SECONDARY_KEY:?Set a private encryption key}
+      NEXT_PUBLIC_WEBAPP_URL: ${NEXT_PUBLIC_WEBAPP_URL:?Set the public app URL}
+      NEXT_PRIVATE_INTERNAL_WEBAPP_URL: http://localhost:3000
+      NEXT_PRIVATE_DATABASE_URL: ${NEXT_PRIVATE_DATABASE_URL:?Set the own database URL}
+      NEXT_PRIVATE_DIRECT_DATABASE_URL: ${NEXT_PRIVATE_DIRECT_DATABASE_URL:-${NEXT_PRIVATE_DATABASE_URL}}
+      NEXT_PUBLIC_UPLOAD_TRANSPORT: ${NEXT_PUBLIC_UPLOAD_TRANSPORT:-database}
+      NEXT_PRIVATE_JOBS_PROVIDER: local
+      NEXT_PRIVATE_SMTP_FROM_NAME: ${NEXT_PRIVATE_SMTP_FROM_NAME:-e-sign}
+      NEXT_PRIVATE_SMTP_FROM_ADDRESS: ${NEXT_PRIVATE_SMTP_FROM_ADDRESS:?Set a sender address}
+      NEXT_PRIVATE_SIGNING_LOCAL_FILE_PATH: /opt/e-sign/cert.p12
+      NEXT_PRIVATE_SIGNING_PASSPHRASE: ${NEXT_PRIVATE_SIGNING_PASSPHRASE:-}
+    ports:
+      - "${PORT:-3000}:3000"
+    volumes:
+      - ${SIGNING_CERTIFICATE_PATH:?Set the own certificate path}:/opt/e-sign/cert.p12:ro
+volumes:
+  database:

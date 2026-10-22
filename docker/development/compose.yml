@@ -1,0 +1,27 @@
+name: e-sign-development
+services:
+  database:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: e_sign
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set a private database password}
+      POSTGRES_DB: e_sign
+    ports:
+      - "54320:5432"
+    volumes:
+      - database:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+  queue:
+    profiles: [queue]
+    image: redis:8-alpine
+    ports:
+      - "63790:6379"
+    volumes:
+      - queue:/data
+volumes:
+  database:
+  queue:

@@ -1,0 +1,35 @@
+import { Hono } from 'hono';
+
+import { GoogleAuthOptions, MicrosoftAuthOptions, OidcAuthOptions } from '../config';
+import { completeOrganisation } from '../lib/utils/enterprise-sign-in';
+import { handleOAuthCallbackUrl } from '../lib/utils/handle-oauth-callback-url';
+import type { HonoAuthContext } from '../types/context';
+
+/**
+ * Have to create this route instead of bundling callback with oauth routes to provide
+ * backwards compatibility for self-hosters (since we used to use NextAuth).
+ */
+export const callbackRoute = new Hono<HonoAuthContext>()
+  /**
+   * OIDC callback verification.
+   */
+  .get('/oidc', async (c) => handleOAuthCallbackUrl({ c, clientOptions: OidcAuthOptions }))
+
+  /**
+   * Organisation OIDC callback verification.
+   */
+  .get('/oidc/org/:orgUrl', async (c) => {
+    const orgUrl = c.req.param('orgUrl');
+
+    return completeOrganisation(c, orgUrl);
+  })
+
+  /**
+   * Google callback verification.
+   */
+  .get('/google', async (c) => handleOAuthCallbackUrl({ c, clientOptions: GoogleAuthOptions }))
+
+  /**
+   * Microsoft callback verification.
+   */
+  .get('/microsoft', async (c) => handleOAuthCallbackUrl({ c, clientOptions: MicrosoftAuthOptions }));

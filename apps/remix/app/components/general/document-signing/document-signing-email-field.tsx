@@ -1,0 +1,150 @@
+import { useAnalytics } from '@e-sign/lib/client-only/hooks/use-analytics';
+import { DO_NOT_INVALIDATE_QUERY_ON_MUTATION } from '@e-sign/lib/constants/trpc';
+import { AppError, AppErrorCode } from '@e-sign/lib/errors/app-error';
+import type { TRecipientActionAuth } from '@e-sign/lib/types/document-auth';
+import { ZEmailFieldMeta } from '@e-sign/lib/types/field-meta';
+import type { FieldWithSignature } from '@e-sign/prisma/types/field-with-signature';
+import { trpc } from '@e-sign/trpc/react';
+import type {
+  TRemovedSignedFieldWithTokenMutationSchema,
+  TSignFieldWithTokenMutationSchema,
+} from '@e-sign/trpc/server/field-router/schema';
+import { useToast } from '@e-sign/ui/primitives/use-toast';
+import { msg } from '@lingui/core/macro';
+import { useLingui } from '@lingui/react';
+import { Trans } from '@lingui/react/macro';
+import { useRevalidator } from 'react-router';
+
+import { DocumentSigningFieldContainer } from './document-signing-field-container';
+import {
+  DocumentSigningFieldsInserted,
+  DocumentSigningFieldsLoader,
+  DocumentSigningFieldsUninserted,
+} from './document-signing-fields';
+import { useRequiredDocumentSigningContext } from './document-signing-provider';
+import { useDocumentSigningRecipientContext } from './document-signing-recipient-provider';
+
+export type DocumentSigningEmailFieldProps = {
+  field: FieldWithSignature;
+  onSignField?: (value: TSignFieldWithTokenMutationSchema) => Promise<void> | void;
+  onUnsignField?: (value: TRemovedSignedFieldWithTokenMutationSchema) => Promise<void> | void;
+};
+
+export const DocumentSigningEmailField = ({ field, onSignField, onUnsignField }: DocumentSigningEmailFieldProps) => {
+  const { _ } = useLingui();
+  const { toast } = useToast();
+  const { revalidate } = useRevalidator();
+  const analytics = useAnalytics();
+
+  const { email: providedEmail } = useRequiredDocumentSigningContext();
+
+  const { recipient, targetSigner, isAssistantMode } = useDocumentSigningRecipientContext();
+
+  const { mutateAsync: signFieldWithToken, isPending: isSignFieldWithTokenLoading } =
+    trpc.field.signFieldWithToken.useMutation(DO_NOT_INVALIDATE_QUERY_ON_MUTATION);
+
+  const { mutateAsync: removeSignedFieldWithToken, isPending: isRemoveSignedFieldWithTokenLoading } =
+    trpc.field.removeSignedFieldWithToken.useMutation(DO_NOT_INVALIDATE_QUERY_ON_MUTATION);
+
+  const isLoading = isSignFieldWithTokenLoading || isRemoveSignedFieldWithTokenLoading;
+
+  const safeFieldMeta = ZEmailFieldMeta.safeParse(field.fieldMeta);
+  const parsedFieldMeta = safeFieldMeta.success ? safeFieldMeta.data : null;
+
+  const onSign = async (authOptions?: TRecipientActionAuth) => {
+    try {
+      const value = providedEmail ?? '';
+
+      const payload: TSignFieldWithTokenMutationSchema = {
+        token: recipient.token,
+        fieldId: field.id,
+        value,
+        isBase64: false,
+        authOptions,
+      };
+
+      if (onSignField) {
+        await onSignField(payload);
+        return;
+      }
+
+      await signFieldWithToken(payload);
+
+      await revalidate();
+    } catch (err) {
+      const error = AppError.parseError(err);
+
+      if (error.code === AppErrorCode.UNAUTHORIZED) {
+        throw error;
+      }
+
+      console.error(err);
+
+      analytics.captureException(err, {
+        source: 'signing',
+        location: 'sign_field',
+        fieldType: field.type,
+        recipientId: field.recipientId,
+      });
+
+      toast({
+        title: _(msg`Error`),
+        description: isAssistantMode
+          ? _(msg`An error occurred while signing as assistant.`)
+          : _(msg`An error occurred while signing the document.`),
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const onRemove = async () => {
+    try {
+      const payload: TRemovedSignedFieldWithTokenMutationSchema = {
+        token: recipient.token,
+        fieldId: field.id,
+      };
+
+      if (onUnsignField) {
+        await onUnsignField(payload);
+        return;
+      }
+
+      await removeSignedFieldWithToken(payload);
+
+      await revalidate();
+    } catch (err) {
+      console.error(err);
+
+      analytics.captureException(err, {
+        source: 'signing',
+        location: 'remove_field',
+        fieldType: field.type,
+        recipientId: field.recipientId,
+      });
+
+      toast({
+        title: _(msg`Error`),
+        description: _(msg`An error occurred while removing the field.`),
+        variant: 'destructive',
+      });
+    }
+  };
+
+  return (
+    <DocumentSigningFieldContainer field={field} onSign={onSign} onRemove={onRemove} type="Email">
+      {isLoading && <DocumentSigningFieldsLoader />}
+
+      {!field.inserted && (
+        <DocumentSigningFieldsUninserted>
+          <Trans>Email</Trans>
+        </DocumentSigningFieldsUninserted>
+      )}
+
+      {field.inserted && (
+        <DocumentSigningFieldsInserted textAlign={parsedFieldMeta?.textAlign}>
+          {field.customText}
+        </DocumentSigningFieldsInserted>
+      )}
+    </DocumentSigningFieldContainer>
+  );
+};

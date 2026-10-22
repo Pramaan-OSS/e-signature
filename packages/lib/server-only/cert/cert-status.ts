@@ -1,0 +1,31 @@
+import { X509Certificate } from 'node:crypto';
+
+import { createLocalSigner } from '@e-sign/signing/transports/local';
+
+import { NEXT_PRIVATE_SIGNING_TRANSPORT } from '../../constants/app';
+
+/**
+ * Whether the local P12 opens with the configured passphrase and is in date.
+ * Skips certificate fetching so this stays offline. Remote signing is not yet live-verified.
+ */
+export const getCertificateStatus = async () => {
+  const transport = NEXT_PRIVATE_SIGNING_TRANSPORT();
+
+  if (transport !== 'local') {
+    return { isAvailable: false };
+  }
+
+  try {
+    const signer = await createLocalSigner({ buildChain: false });
+
+    const certificate = new X509Certificate(Buffer.from(signer.certificate));
+
+    const now = new Date();
+
+    const isWithinValidityPeriod = new Date(certificate.validFrom) <= now && now <= new Date(certificate.validTo);
+
+    return { isAvailable: isWithinValidityPeriod };
+  } catch {
+    return { isAvailable: false };
+  }
+};

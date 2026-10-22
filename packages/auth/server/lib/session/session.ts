@@ -1,0 +1,174 @@
+import { AppError, AppErrorCode } from '@e-sign/lib/errors/app-error';
+import type { RequestMetadata } from '@e-sign/lib/universal/extract-request-metadata';
+import { prisma } from '@e-sign/prisma';
+import { sha256 } from '@oslojs/crypto/sha2';
+import { encodeBase32LowerCaseNoPadding, encodeHexLowerCase } from '@oslojs/encoding';
+import { type Prisma, type Session, type User, UserSecurityAuditLogType } from '@prisma/client';
+
+import { AUTH_EMBED_SESSION_LIFETIME, AUTH_SESSION_LIFETIME } from '../../config';
+
+/**
+ * The user object to pass around the app.
+ *
+ * Do not put anything sensitive in here since it will be public.
+ */
+export type SessionUser = Pick<
+  User,
+  'id' | 'name' | 'email' | 'emailVerified' | 'avatarImageId' | 'twoFactorEnabled' | 'roles' | 'signature' | 'disabled'
+>;
+
+export type SessionValidationResult =
+  | {
+      session: Session;
+      user: SessionUser;
+      isAuthenticated: true;
+    }
+  | { session: null; user: null; isAuthenticated: false };
+
+export const generateSessionToken = (): string => {
+  const bytes = new Uint8Array(20);
+
+  crypto.getRandomValues(bytes);
+
+  const token = encodeBase32LowerCaseNoPadding(bytes);
+
+  return token;
+};
+
+export type CreateSessionOptions = {
+  isEmbed?: boolean;
+  tx?: Prisma.TransactionClient;
+};
+
+export const createSession = async (
+  token: string,
+  userId: number,
+  metadata: RequestMetadata,
+  { isEmbed = false, tx = prisma }: CreateSessionOptions = {},
+): Promise<Session> => {
+  const hashedSessionId = encodeHexLowerCase(sha256(new TextEncoder().encode(token)));
+
+  const session: Session = {
+    id: hashedSessionId,
+    sessionToken: hashedSessionId,
+    userId,
+    updatedAt: new Date(),
+    createdAt: new Date(),
+    expiresAt: new Date(Date.now() + (isEmbed ? AUTH_EMBED_SESSION_LIFETIME : AUTH_SESSION_LIFETIME)),
+    ipAddress: metadata.ipAddress ?? null,
+    userAgent: metadata.userAgent ?? null,
+    isEmbed,
+  };
+
+  await tx.session.create({
+    data: session,
+  });
+
+  await tx.userSecurityAuditLog.create({
+    data: {
+      userId,
+      ipAddress: metadata.ipAddress,
+      userAgent: metadata.userAgent,
+      type: UserSecurityAuditLogType.SIGN_IN,
+    },
+  });
+
+  return session;
+};
+
+export const validateSessionToken = async (token: string): Promise<SessionValidationResult> => {
+  const sessionId = encodeHexLowerCase(sha256(new TextEncoder().encode(token)));
+
+  const result = await prisma.session.findUnique({
+    where: {
+      id: sessionId,
+    },
+    include: {
+      user: {
+        /**
+         * Do not expose anything sensitive here.
+         */
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          emailVerified: true,
+          avatarImageId: true,
+          twoFactorEnabled: true,
+          roles: true,
+          signature: true,
+          disabled: true,
+        },
+      },
+    },
+  });
+
+  if (!result?.user) {
+    return { session: null, user: null, isAuthenticated: false };
+  }
+
+  const { user, ...session } = result;
+
+  if (Date.now() >= session.expiresAt.getTime()) {
+    await prisma.session.delete({ where: { id: sessionId } });
+    return { session: null, user: null, isAuthenticated: false };
+  }
+
+  // Embed sessions are never extended; the user starts a new popup flow instead.
+  if (!session.isEmbed && Date.now() >= session.expiresAt.getTime() - 1000 * 60 * 60 * 24 * 15) {
+    session.expiresAt = new Date(Date.now() + AUTH_SESSION_LIFETIME);
+
+    await prisma.session.update({
+      where: {
+        id: session.id,
+      },
+      data: {
+        expiresAt: session.expiresAt,
+      },
+    });
+  }
+
+  return { session, user, isAuthenticated: true };
+};
+
+type InvalidateSessionsOptions = {
+  userId: number;
+  sessionIds: string[];
+  metadata: RequestMetadata;
+  isRevoke?: boolean;
+};
+
+export const invalidateSessions = async ({
+  userId,
+  sessionIds,
+  metadata,
+  isRevoke,
+}: InvalidateSessionsOptions): Promise<void> => {
+  if (sessionIds.length === 0) {
+    return;
+  }
+
+  await prisma.$transaction(async (tx) => {
+    const { count } = await tx.session.deleteMany({
+      where: {
+        userId,
+        id: { in: sessionIds },
+      },
+    });
+
+    if (count !== sessionIds.length) {
+      throw new AppError(AppErrorCode.INVALID_REQUEST, {
+        message: 'One or more sessions are not valid.',
+      });
+    }
+
+    await tx.userSecurityAuditLog.createMany({
+      data: sessionIds.map(() => ({
+        userId,
+        ipAddress: metadata.ipAddress,
+        userAgent: metadata.userAgent,
+        type: isRevoke ? UserSecurityAuditLogType.SESSION_REVOKED : UserSecurityAuditLogType.SIGN_OUT,
+      })),
+    });
+  });
+};

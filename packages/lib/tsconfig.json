@@ -1,0 +1,9 @@
+{
+  "extends": "@e-sign/tsconfig/react-library.json",
+  "compilerOptions": {
+    "types": ["@e-sign/tsconfig/process-env.d.ts", "vite/client"],
+    "moduleResolution": "Bundler"
+  },
+  "include": ["**/*.ts", "**/*.tsx", "**/*.d.ts"],
+  "exclude": ["dist", "build", "node_modules"]
+}

@@ -1,0 +1,93 @@
+import { DEFAULT_MINIMUM_ENVELOPE_ITEM_COUNT, PAID_PLAN_LIMITS } from '@e-sign/lib/template/limits';
+import { LimitsProvider } from '@e-sign/lib/template/limits-client';
+import { useChildRouteFlags } from '@e-sign/lib/client-only/hooks/use-child-route-flags';
+import { useOptionalCurrentOrganisation } from '@e-sign/lib/client-only/providers/organisation';
+import { isOrganisationPendingPayment } from '@e-sign/lib/utils/billing';
+import { TrpcProvider } from '@e-sign/trpc/react';
+import { cn } from '@e-sign/ui/lib/utils';
+import { Button } from '@e-sign/ui/primitives/button';
+import { msg } from '@lingui/core/macro';
+import { Trans } from '@lingui/react/macro';
+import { SubscriptionStatus } from '@prisma/client';
+import { useMemo } from 'react';
+import { Link, Outlet } from 'react-router';
+
+import { GenericErrorLayout } from '~/components/general/generic-error-layout';
+import { useOptionalCurrentTeam } from '~/providers/team';
+
+export default function Layout() {
+  const team = useOptionalCurrentTeam();
+  const organisation = useOptionalCurrentOrganisation();
+
+  const { layoutMode } = useChildRouteFlags();
+
+  const limits = useMemo(() => {
+    if (!organisation) {
+      return undefined;
+    }
+
+    const isRestricted =
+      (organisation.subscription && organisation.subscription.status === SubscriptionStatus.INACTIVE) ||
+      isOrganisationPendingPayment(organisation);
+
+    if (isRestricted) {
+      return {
+        quota: {
+          documents: 0,
+          recipients: 0,
+          directTemplates: 0,
+        },
+        remaining: {
+          documents: 0,
+          recipients: 0,
+          directTemplates: 0,
+        },
+        maximumEnvelopeItemCount: 0,
+      };
+    }
+
+    return {
+      quota: PAID_PLAN_LIMITS,
+      remaining: PAID_PLAN_LIMITS,
+      maximumEnvelopeItemCount: DEFAULT_MINIMUM_ENVELOPE_ITEM_COUNT,
+    };
+  }, [organisation]);
+
+  if (!team) {
+    return (
+      <GenericErrorLayout
+        errorCode={404}
+        errorCodeMap={{
+          404: {
+            heading: msg`Team not found`,
+            subHeading: msg`404 Team not found`,
+            message: msg`The team you are looking for may have been removed, renamed or may have never existed.`,
+          },
+        }}
+        primaryButton={
+          <Button asChild>
+            <Link to="/settings/teams">
+              <Trans>View teams</Trans>
+            </Link>
+          </Button>
+        }
+      ></GenericErrorLayout>
+    );
+  }
+
+  const trpcHeaders = {
+    'x-team-Id': team.id.toString(),
+  };
+
+  // Note: We use a key to force a re-render if the team context changes.
+  // This is required otherwise you would see the wrong page content.
+  return (
+    <div key={team.url} className={cn({ 'md:flex md:min-h-0 md:flex-1 md:flex-col': layoutMode === 'settings' })}>
+      <TrpcProvider headers={trpcHeaders}>
+        <LimitsProvider initialValue={limits} teamId={team.id}>
+          <Outlet />
+        </LimitsProvider>
+      </TrpcProvider>
+    </div>
+  );
+}
