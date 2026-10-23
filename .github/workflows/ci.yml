@@ -1,0 +1,64 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+env:
+  PRAMAAN_API_KEY: ""
+  PRAMAAN_FAKE: "1"
+  DO_NOT_TRACK: "1"
+  NEXT_TELEMETRY_DISABLED: "1"
+  TURBO_TELEMETRY_DISABLED: "1"
+  CHECKPOINT_DISABLE: "1"
+  HUSKY: "0"
+  PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+  NEXT_PRIVATE_DATABASE_URL: postgresql://build:build@127.0.0.1:5432/build
+  NEXT_PRIVATE_DIRECT_DATABASE_URL: postgresql://build:build@127.0.0.1:5432/build
+  NEXT_PUBLIC_WEBAPP_URL: http://localhost:3012
+  NEXT_PRIVATE_INTERNAL_WEBAPP_URL: http://localhost:3012
+  NEXTAUTH_SECRET: ci-local-session-secret
+  NEXT_PRIVATE_ENCRYPTION_KEY: "0000000000000000000000000000000000000000000000000000000000000000"
+  NEXT_PRIVATE_ENCRYPTION_SECONDARY_KEY: "1111111111111111111111111111111111111111111111111111111111111111"
+  NEXT_PRIVATE_JOBS_PROVIDER: local
+  NEXT_PUBLIC_UPLOAD_TRANSPORT: database
+  NEXT_PRIVATE_SIGNING_TRANSPORT: local
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+      - name: Run lint
+        run: npm run lint:ci
+  typecheck:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+      - name: Run typecheck
+        run: npm run typecheck -w @e-sign/remix
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+      - name: Run test
+        run: npm run test:ci
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+      - name: Run build
+        run: npm run build -- --env-mode=loose

@@ -1,0 +1,20 @@
+name: Set up e-sign
+description: Install pinned dependencies and generate local build inputs
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version-file: .node-version
+        cache: npm
+    - name: Enable the pinned package manager
+      shell: bash
+      run: corepack enable npm
+    - name: Install dependencies
+      shell: bash
+      run: npm ci --no-audit --no-fund
+    - name: Generate database client and translations
+      shell: bash
+      run: |
+        npm run prisma:generate
+        npm run translate:compile

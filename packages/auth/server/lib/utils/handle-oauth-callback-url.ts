@@ -261,7 +261,7 @@ export const validateOauth = async (options: HandleOAuthCallbackUrlOptions) => {
     providerKey: clientOptions.id === 'google' ? 'google-identity' : 'microsoft-identity',
     code, redirectUri: clientOptions.redirectUrl, pkceVerifier: storedCodeVerifier,
   });
-  if (!identity.email || !identity.emailVerified) throw new AppError(AuthenticationErrorCode.UnverifiedEmail, { message: 'Use an account with a verified email.' });
+  if (!identity.email || !identity.emailVerified) { throw new AppError(AuthenticationErrorCode.UnverifiedEmail, { message: 'Use an account with a verified email.' }); }
   const email = identity.email;
   const name = identity.displayName || email;
   const sub = identity.subjectId;

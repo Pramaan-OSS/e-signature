@@ -1,3 +1,5 @@
+[![CI](https://github.com/Pramaan-OSS/e-sign/actions/workflows/ci.yml/badge.svg)](https://github.com/Pramaan-OSS/e-sign/actions/workflows/ci.yml)
+
 # e-sign
 
 Document signing and templates, with outside service actions routed through Pramaan. Sign-in and the database are provided through Pramaan in test mode.

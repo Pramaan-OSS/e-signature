@@ -39,7 +39,9 @@
     "translate:compile": "lingui compile",
     "setup:local": "node scripts/setup-local.mjs && npm run prisma:generate && npm run prisma:migrate-deploy",
     "check:schemas": "node --import tsx scripts/check-pramaan-schemas.ts",
-    "check:inline-menus": "node scripts/check-inline-menus.mjs"
+    "check:inline-menus": "node scripts/check-inline-menus.mjs",
+    "lint:ci": "biome lint apps packages scripts",
+    "test:ci": "npm test -w @e-sign/lib -- --maxWorkers=1 && node --import tsx --test packages/lib/server-only/pramaan/sdk-compat.node-test.ts && node --test scripts/setup-local.test.mjs scripts/check-inline-menus.test.mjs scripts/check-migration-scope.test.mjs"
   },
   "packageManager": "npm@11.19.1",
   "engines": {

@@ -4,7 +4,7 @@ import { deleteObject, putObject } from '../../../server-only/pramaan/storage';
 import type { StorageProvider, UploadFileInput } from './storage-provider';
 const secret = () => {
   const key = process.env.NEXTAUTH_SECRET;
-  if (!key) throw new Error('File access requires the app session secret.');
+  if (!key) { throw new Error('File access requires the app session secret.'); }
   return key;
 };
 export function createFileGrant(key: string, action: 'get' | 'put') {
@@ -13,12 +13,12 @@ export function createFileGrant(key: string, action: 'get' | 'put') {
 }
 export function readFileGrant(grant: string, action: 'get' | 'put'): string {
   const [payload, signature] = grant.split('.');
-  if (!payload || !signature) throw new Error('File access expired.');
+  if (!payload || !signature) { throw new Error('File access expired.'); }
   const actual = Buffer.from(signature, 'base64url');
   const expected = createHmac('sha256', secret()).update(payload).digest();
-  if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) throw new Error('File access expired.');
+  if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) { throw new Error('File access expired.'); }
   const claim = JSON.parse(Buffer.from(payload, 'base64url').toString());
-  if (claim.action !== action || claim.expires < Date.now() || typeof claim.key !== 'string' || claim.key.includes('..')) throw new Error('File access expired.');
+  if (claim.action !== action || claim.expires < Date.now() || typeof claim.key !== 'string' || claim.key.includes('..')) { throw new Error('File access expired.'); }
   return claim.key;
 }
 export class PramaanStorageProvider implements StorageProvider {
