@@ -1,3 +1,4 @@
+import { signingCertificateFixture } from './signing-certificate';
 import { createHash } from 'node:crypto';
 import { appendFileSync, mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -17,6 +18,7 @@ export function fakePramaan(
     unavailableCapabilities?: string[];
     refuseEmailAttachments?: boolean;
     replyFault?: 'length' | 'maxTokens';
+    certificateRead?: 'refused' | 'unavailable' | 'mismatch';
   } = {},
 ): CapabilityClient {
   let extractionAttempts = 0;
@@ -125,6 +127,16 @@ export function fakePramaan(
         });
       }
       preparePramaanSchemas(id, input, false);
+      if (id === 'signature.certificate.get') {
+        appendFileSync(ledger, `${JSON.stringify({ id, readOnly: true })}\n`);
+        if (faults.certificateRead === 'unavailable' || faults.unavailableCapabilities?.includes(id)) {
+          throw { code: 'not_found', status: 404, effect: 'none' };
+        }
+        if (faults.certificateRead === 'refused') {
+          throw { code: 'forbidden', status: 403, effect: 'none' };
+        }
+        return { ...signingCertificateFixture, ...(faults.certificateRead === 'mismatch' ? { publicKeySpkiBase64: 'AAAA' } : {}) };
+      }
       if (faults.unavailableCapabilities?.includes(id)) {
         throw { code: 'upstream_unavailable', effect: 'none' };
       }

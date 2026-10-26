@@ -265,3 +265,12 @@ export async function readPramaanJob(id: string, cancel = false): Promise<Job<Ou
     throw neutralOutcomeError(error);
   }
 }
+
+/** Published read id absent from the pinned SDK types; keep it on the same generic client. */
+export async function readConnectedSigningCertificate(account: string): Promise<unknown> {
+  if (!account || account.length > 256 || /[\r\n]/.test(account)) {
+    throw new Error('Configure the selected signing connection first.');
+  }
+  const call = callPramaan as (id: string, input: unknown, options: RunOptions) => Promise<unknown>;
+  return call('signature.certificate.get', {}, { account });
+}

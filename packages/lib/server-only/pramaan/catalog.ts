@@ -61,6 +61,17 @@ const ids = [
   'storage.object.head',
   'document.parse',
 ];
-export const CATALOG: Readonly<Record<string, CapabilityInfo>> = Object.fromEntries(
-  ids.map((id) => [id, SDK_CATALOG[id]]),
-);
+export const CATALOG: Readonly<Record<string, CapabilityInfo>> = Object.fromEntries([
+  ...ids.map((id) => [id, SDK_CATALOG[id]]),
+  [
+    'signature.certificate.get',
+    {
+      id: 'signature.certificate.get',
+      description: 'Read the selected connected signing certificate.',
+      effectClass: 'read_only',
+      mode: 'sync',
+      needsConnection: true,
+      resultOnce: true,
+    },
+  ],
+]);
